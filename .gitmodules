@@ -1,0 +1,6 @@
+[submodule "src/main/resources/ara/ara"]
+	path = src/main/resources/ara/ara
+	url = https://github.com/pulp-platform/ara.git
+[submodule "src/main/resources/ara/vsrc/ara"]
+	path = src/main/resources/ara/vsrc/ara
+	url = https://github.com/pulp-platform/ara.git
