@@ -34,15 +34,20 @@ class AraRocketUnit(nLanes: Int, axiIdBits: Int)(implicit p: Parameters) extends
   class AraRocketImpl extends RocketVectorUnitModuleImp(this) with HasCoreParameters {
     val nXacts = 8
 
+    def eewByteMask(eew: UInt) = (0 until (1+log2Ceil(64/8))).map { e =>
+      Mux(e.U === eew, ((1 << (1 << e)) - 1).U, 0.U)
+    }.reduce(_|_)((eLen/8)-1,0)
+    def eewBitMask(eew: UInt) = FillInterleaved(8, eewByteMask(eew))
+
     val ara = Module(new AraBlackbox(nXacts, nLanes, axiIdBits, 64, 1, axiDataWidth))
 
     val mem_valid = RegNext(io.core.ex.valid, false.B) && !io.core.killm
     val mem_inst = RegEnable(io.core.ex.inst, io.core.ex.valid)
+    val mem_vconfig = RegEnable(io.core.ex.vconfig, io.core.ex.valid)
     val mem_rs1 = Mux(mem_inst(14,12).isOneOf(1.U, 5.U) && !mem_inst(6,0).isOneOf(7.U, 39.U),
-      io.core.mem.frs1,
+      io.core.mem.frs1 & eewBitMask(mem_vconfig.vtype.vsew),
       RegEnable(io.core.ex.rs1, io.core.ex.valid))
     val mem_rs2 = RegEnable(io.core.ex.rs2, io.core.ex.valid)
-    val mem_vconfig = RegEnable(io.core.ex.vconfig, io.core.ex.valid)
     val mem_pc = RegEnable(io.core.ex.pc, io.core.ex.valid)
 
     val wb_valid = RegNext(mem_valid, false.B)
