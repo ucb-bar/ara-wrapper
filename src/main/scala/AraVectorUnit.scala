@@ -38,7 +38,9 @@ class AraRocketUnit(nLanes: Int, axiIdBits: Int)(implicit p: Parameters) extends
 
     val mem_valid = RegNext(io.core.ex.valid, false.B) && !io.core.killm
     val mem_inst = RegEnable(io.core.ex.inst, io.core.ex.valid)
-    val mem_rs1 = RegEnable(io.core.ex.rs1, io.core.ex.valid)
+    val mem_rs1 = Mux(mem_inst(14,12).isOneOf(1.U, 5.U) && !mem_inst(6,0).isOneOf(7.U, 39.U),
+      io.core.mem.frs1,
+      RegEnable(io.core.ex.rs1, io.core.ex.valid))
     val mem_rs2 = RegEnable(io.core.ex.rs2, io.core.ex.valid)
     val mem_vconfig = RegEnable(io.core.ex.vconfig, io.core.ex.valid)
     val mem_pc = RegEnable(io.core.ex.pc, io.core.ex.valid)
@@ -87,7 +89,7 @@ class AraRocketUnit(nLanes: Int, axiIdBits: Int)(implicit p: Parameters) extends
     val next_xact_id = PriorityEncoder(~xact_valids)
 
     when (wb_valid && io.core.wb.retire) {
-      xact_valids(next_xact_id) := false.B
+      xact_valids(next_xact_id) := true.B
       xacts(next_xact_id).wxd := wb_dec.io.write_rd || wb_set
       xacts(next_xact_id).wfd := wb_dec.io.write_frd && !wb_set
       xacts(next_xact_id).size := wb_vconfig.vtype.vsew
