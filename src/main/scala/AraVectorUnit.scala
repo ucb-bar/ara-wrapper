@@ -27,10 +27,12 @@ class AraRocketUnit(nLanes: Int, axiIdBits: Int)(implicit p: Parameters) extends
   (atlNode := TLFIFOFixer(TLFIFOFixer.all) // fix FIFO ordering
     := TLWidthWidget(axiDataWidth/8) // reduce size of TL
     := AXI4ToTL() // convert to TL
+    := AXI4UserYanker(Some(8))
+    := AXI4Fragmenter()
     := memAXI4Node)
 
   class AraRocketImpl extends RocketVectorUnitModuleImp(this) with HasCoreParameters {
-    val nXacts = 32
+    val nXacts = 8
 
     val ara = Module(new AraBlackbox(nXacts, nLanes, axiIdBits, 64, 1, axiDataWidth))
 
@@ -51,47 +53,83 @@ class AraRocketUnit(nLanes: Int, axiIdBits: Int)(implicit p: Parameters) extends
     wb_dec.io.inst := wb_inst
     wb_dec.io.vconfig := wb_vconfig
 
+    val wb_set = Seq(Instructions.VSETVLI, Instructions.VSETIVLI, Instructions.VSETVL).map(_ === wb_inst).orR
+
+    val iss_q = Module(new Queue(new Bundle {
+      val insn = UInt(32.W)
+      val rs1 = UInt(64.W)
+      val rs2 = UInt(64.W)
+      val frm = UInt(2.W)
+      val trans_id = UInt(log2Ceil(nXacts).W)
+    }, 2))
+
+    val resp_q = Module(new Queue(new Bundle {
+      val result = UInt(32.W)
+      val trans_id = UInt(log2Ceil(nXacts).W)
+    }, 2))
+
     class Xact extends Bundle {
       val wfd = Bool()
       val wxd = Bool()
       val size = UInt(2.W)
       val rd = UInt(5.W)
+      val store = Bool()
+      val load = Bool()
+      def writes = wfd || wxd
     }
 
     val xact_valids = RegInit(VecInit.fill(nXacts)(false.B))
     val xacts = Reg(Vec(nXacts, new Xact))
+    val store_pending = xact_valids.zip(xacts).map(t => t._1 && t._2.store).orR
+    val load_pending = xact_valids.zip(xacts).map(t => t._1 && t._2.load).orR
 
     val wb_ready = !(xact_valids.andR)
-    val next_xact_id = PriorityEncoder(xact_valids)
+    val next_xact_id = PriorityEncoder(~xact_valids)
 
     when (wb_valid && io.core.wb.retire) {
       xact_valids(next_xact_id) := false.B
-      xacts(next_xact_id).wxd := wb_dec.io.write_rd
-      xacts(next_xact_id).wfd := wb_dec.io.write_frd
+      xacts(next_xact_id).wxd := wb_dec.io.write_rd || wb_set
+      xacts(next_xact_id).wfd := wb_dec.io.write_frd && !wb_set
       xacts(next_xact_id).size := wb_vconfig.vtype.vsew
       xacts(next_xact_id).rd := wb_inst(11,7)
+      xacts(next_xact_id).store := wb_inst(6,0) === "b0100111".U
+      xacts(next_xact_id).load := wb_inst(6,0) === "b0000111".U
     }
 
+    iss_q.io.enq.valid := wb_valid && (wb_dec.io.legal || wb_set)
+    iss_q.io.enq.bits.insn := wb_inst
+    iss_q.io.enq.bits.rs1 := wb_rs1
+    iss_q.io.enq.bits.rs2 := wb_rs2
+    iss_q.io.enq.bits.frm := io.core.wb.frm
+    iss_q.io.enq.bits.trans_id := next_xact_id
+    iss_q.io.deq.ready := ara.io.resp.req_ready
+
+    resp_q.io.enq.valid := ara.io.resp.resp_valid
+    resp_q.io.enq.bits.result := ara.io.resp.result
+    resp_q.io.enq.bits.trans_id := ara.io.resp.trans_id
+    ara.io.req.resp_ready :=  resp_q.io.enq.ready
+
+    io.core.resp.valid := resp_q.io.deq.valid && xact_valids(resp_q.io.deq.bits.trans_id) && xacts(resp_q.io.deq.bits.trans_id).writes
+    io.core.resp.bits.fp := xacts(resp_q.io.deq.bits.trans_id).wfd
+    io.core.resp.bits.size := xacts(resp_q.io.deq.bits.trans_id).size
+    io.core.resp.bits.rd := xacts(resp_q.io.deq.bits.trans_id).rd
+    io.core.resp.bits.data := resp_q.io.deq.bits.result
+    resp_q.io.deq.ready := io.core.resp.ready
 
     io.core.ex.ready := true.B
-    io.core.mem.block_mem := ara.io.resp.store_pending
+    io.core.mem.block_mem := store_pending || (isWrite(io.tlb.s1_resp.cmd) && load_pending)
     io.core.mem.block_all := false.B
-    io.core.wb.replay := !ara.io.resp.req_ready
-    io.core.wb.retire := ara.io.resp.req_ready && wb_dec.io.legal
+    io.core.wb.replay := wb_valid && !iss_q.io.enq.ready
+    io.core.wb.retire := iss_q.io.enq.ready && (wb_dec.io.legal || wb_set) && wb_valid
     io.core.wb.inst := wb_inst
-    io.core.wb.rob_should_wb := wb_dec.io.write_rd
-    io.core.wb.rob_should_wb_fp := wb_dec.io.write_frd
+    io.core.wb.rob_should_wb := wb_dec.io.write_rd || wb_set
+    io.core.wb.rob_should_wb_fp := wb_dec.io.write_frd && !wb_set
     io.core.wb.pc := wb_pc
     io.core.wb.xcpt := false.B // ara does not support precise traps
     io.core.wb.cause := DontCare
     io.core.wb.tval := DontCare
-    io.core.resp.valid := ara.io.resp.resp_valid && (xacts(ara.io.resp.trans_id).wxd || xacts(ara.io.resp.trans_id).wfd)
-    io.core.resp.bits.fp := xacts(ara.io.resp.trans_id).wfd
-    io.core.resp.bits.size := xacts(ara.io.resp.trans_id).size
-    io.core.resp.bits.rd := xacts(ara.io.resp.trans_id).rd
-    io.core.resp.bits.data := ara.io.resp.result
 
-    io.core.set_vstart.valid := true.B // ara does not need to support vstart != 0, since no precise traps
+    io.core.set_vstart.valid := wb_valid && io.core.wb.retire // ara does not need to support vstart != 0, since no precise traps
     io.core.set_vstart.bits := 0.U
     io.core.set_vxsat := false.B // ara does not set_vxsat
     io.core.set_vconfig.valid := false.B // ara does not support fault-first
@@ -101,8 +139,8 @@ class AraRocketUnit(nLanes: Int, axiIdBits: Int)(implicit p: Parameters) extends
     io.core.trap_check_busy := false.B // ara does not have trap-check for precise faults
     io.core.backend_busy := xact_valids.orR
 
-    when (ara.io.resp.resp_valid && ara.io.req.resp_ready) {
-      xact_valids(ara.io.resp.trans_id) := false.B
+    when (resp_q.io.deq.fire) {
+      xact_valids(resp_q.io.deq.bits.trans_id) := false.B
     }
 
     io.tlb.req.valid := false.B // ara does not support virtual memory
@@ -117,13 +155,13 @@ class AraRocketUnit(nLanes: Int, axiIdBits: Int)(implicit p: Parameters) extends
 
     ara.io.clk_i := clock
     ara.io.rst_ni := !reset.asBool
-    ara.io.req.req_valid := wb_valid && io.core.wb.retire && wb_dec.io.legal
+    ara.io.req.req_valid := iss_q.io.deq.valid
     ara.io.req.resp_ready := io.core.resp.ready
-    ara.io.req.insn := wb_inst
-    ara.io.req.rs1 := wb_rs1
-    ara.io.req.rs2 := wb_rs2
-    ara.io.req.frm := io.core.wb.frm
-    ara.io.req.trans_id := next_xact_id
+    ara.io.req.insn := iss_q.io.deq.bits.insn
+    ara.io.req.rs1 := iss_q.io.deq.bits.rs1
+    ara.io.req.rs2 := iss_q.io.deq.bits.rs2
+    ara.io.req.frm := iss_q.io.deq.bits.frm
+    ara.io.req.trans_id := iss_q.io.deq.bits.trans_id
     ara.io.req.store_pending := false.B // ????
     ara.io.req.acc_cons_en := false.B // ????
     ara.io.req.inval_ready := false.B // ????
@@ -202,7 +240,8 @@ class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option
               val decoder = Module(new AraEarlyVectorDecode()(p))
               decoder
             }),
-            useDCache = false
+            useDCache = false,
+            issueVConfig = true
           )),
         )
       )) else tp
