@@ -95,7 +95,7 @@ class AraRocketUnit(nLanes: Int, axiIdBits: Int)(implicit p: Parameters) extends
 
     when (wb_valid && io.core.wb.retire) {
       xact_valids(next_xact_id) := true.B
-      xacts(next_xact_id).wxd := wb_dec.io.write_rd || wb_set
+      xacts(next_xact_id).wxd := wb_dec.io.write_rd && !wb_set
       xacts(next_xact_id).wfd := wb_dec.io.write_frd && !wb_set
       xacts(next_xact_id).size := wb_vconfig.vtype.vsew
       xacts(next_xact_id).rd := wb_inst(11,7)
