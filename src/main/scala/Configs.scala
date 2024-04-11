@@ -45,7 +45,8 @@ class WithAraShuttleVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Optio
             decoder = ((p: Parameters) => {
               val decoder = Module(new AraEarlyVectorDecode()(p))
               decoder
-            })
+            }),
+            issueVConfig = true
           )),
         )
       )) else tp
