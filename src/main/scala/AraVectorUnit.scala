@@ -53,6 +53,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
   val mem_frs1 = Wire(UInt(64.W))
   val wb_store_pending = Wire(Bool())
   val wb_frm = Wire(UInt())
+  val resp_ready = Wire(Bool())
 
   def memNode: AXI4MasterNode
   def eLen: Int
@@ -148,6 +149,13 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
   resp_q.io.enq.bits.trans_id := ara.io.resp.trans_id
   ara.io.req.resp_ready :=  resp_q.io.enq.ready
 
+  val resp_valid = resp_q.io.deq.valid && xact_valids(resp_q.io.deq.bits.trans_id) && xacts(resp_q.io.deq.bits.trans_id).writes
+  val resp_fp = xacts(resp_q.io.deq.bits.trans_id).wfd
+  val resp_size = xacts(resp_q.io.deq.bits.trans_id).size
+  val resp_rd = xacts(resp_q.io.deq.bits.trans_id).rd
+  val resp_data = resp_q.io.deq.bits.result
+  resp_q.io.deq.ready := resp_ready
+
   ara.io.clk_i := clock
   ara.io.rst_ni := !reset.asBool
   ara.io.req.req_valid := iss_q.io.deq.valid
@@ -219,9 +227,57 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
 }
 
 class AraShuttleUnit(val nLanes: Int, val axiIdBits: Int)(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasCoreParameters with HasLazyAra {
-  override lazy val module = new AraShuttleImpl
-  class AraShuttleImpl extends ShuttleVectorUnitModuleImp(this) with HasCoreParameters {
+  override lazy val module = new AraShuttleImpl(this)
+  class AraShuttleImpl(outer: AraShuttleUnit) extends ShuttleVectorUnitModuleImp(outer) with HasCoreParameters with HasLazyAraImpl {
+    def nLanes = outer.nLanes
+    def axiIdBits = outer.axiIdBits
+    def axiDataWidth = outer.axiDataWidth
+    status := io.status
+    ex_valid := io.ex.valid
+    ex_inst := io.ex.uop.inst
+    ex_pc := io.ex.uop.pc
+    ex_vconfig := io.ex.vconfig
+    ex_vstart := io.ex.vstart
+    ex_rs1 := io.ex.uop.rs1_data
+    ex_rs2 := io.ex.uop.rs2_data
+    mem_kill := io.mem.kill
+    mem_frs1 := io.mem.frs1
+    wb_store_pending := io.wb.store_pending
+    wb_frm := io.wb.frm
+    def memNode = memAXI4Node
 
+    io.resp.valid := resp_valid
+    io.resp.bits.fp := resp_fp
+    io.resp.bits.size := resp_size
+    io.resp.bits.rd := resp_rd
+    io.resp.bits.data := resp_data
+    resp_ready := io.resp.ready
+
+    io.ex.ready := true.B
+    io.wb.block_all := wb_valid && !iss_q.io.enq.fire
+    io.wb.internal_replay := false.B
+    io.wb.retire_late := false.B
+    io.wb.inst := wb_inst
+    io.wb.rob_should_wb := wb_dec.io.write_rd || wb_set
+    io.wb.rob_should_wb_fp := wb_dec.io.write_frd && !wb_set
+    io.wb.pc := wb_pc
+    io.wb.xcpt := false.B // ara does not support precise traps
+    io.wb.cause := DontCare
+    io.wb.tval := DontCare
+    io.wb.scalar_check.ready := !(store_pending || (io.wb.scalar_check.bits.store && load_pending))
+
+    io.set_vstart.valid := wb_valid && iss_q.io.enq.fire // ara does not need to support vstart != 0, since no precise traps
+    io.set_vstart.bits := 0.U
+    io.set_vxsat := false.B // ara does not set_vxsat
+    io.set_vconfig.valid := false.B // ara does not support fault-first
+    io.set_vconfig.bits := DontCare
+    io.set_fflags.valid := ara.io.resp.fflags_valid
+    io.set_fflags.bits := ara.io.resp.fflags
+    io.trap_check_busy := false.B // ara does not have trap-check for precise faults
+    io.backend_busy := xact_valids.orR
+
+    io.mem.tlb_req.valid := false.B
+    io.mem.tlb_req.bits := DontCare
   }
 }
 
@@ -246,12 +302,12 @@ class AraRocketUnit(val nLanes: Int, val axiIdBits: Int)(implicit p: Parameters)
     wb_frm := io.core.wb.frm
     def memNode = memAXI4Node
 
-    io.core.resp.valid := resp_q.io.deq.valid && xact_valids(resp_q.io.deq.bits.trans_id) && xacts(resp_q.io.deq.bits.trans_id).writes
-    io.core.resp.bits.fp := xacts(resp_q.io.deq.bits.trans_id).wfd
-    io.core.resp.bits.size := xacts(resp_q.io.deq.bits.trans_id).size
-    io.core.resp.bits.rd := xacts(resp_q.io.deq.bits.trans_id).rd
-    io.core.resp.bits.data := resp_q.io.deq.bits.result
-    resp_q.io.deq.ready := io.core.resp.ready
+    io.core.resp.valid := resp_valid
+    io.core.resp.bits.fp := resp_fp
+    io.core.resp.bits.size := resp_size
+    io.core.resp.bits.rd := resp_rd
+    io.core.resp.bits.data := resp_data
+    resp_ready := io.core.resp.ready
 
     io.core.ex.ready := true.B
     io.core.mem.block_mem := store_pending || (isWrite(io.tlb.s1_resp.cmd) && load_pending)
