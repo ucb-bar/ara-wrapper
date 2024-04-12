@@ -67,7 +67,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
 
   val ara = Module(new AraBlackbox(nXacts, nLanes, axiIdBits, 64, 1, axiDataWidth))
 
-  val mem_valid = RegNext(ex_valid, false.B) && !mem_kill
+  val mem_valid = RegNext(ex_valid && !mem_kill, false.B) && !mem_kill
   val mem_inst = RegEnable(ex_inst, ex_valid)
   val mem_vconfig = RegEnable(ex_vconfig, ex_valid)
   val mem_rs1 = Mux(mem_inst(14,12).isOneOf(1.U, 5.U) && !mem_inst(6,0).isOneOf(7.U, 39.U),
