@@ -248,8 +248,10 @@ class UnsafeAXI4ToTL(numTlTxns: Int, wcorrupt: Boolean)(implicit p: Parameters) 
       // response, mark the write transaction as complete.
       val writeIdMap      = Mem(numTlTxns, UInt(log2Ceil(numIds).W))
       val writeResponseId = writeIdMap.read(strippedResponseSourceId)
-      when(edgeOut.done(wOut)) {
+      when(wOut.fire) {
         writeIdMap.write(freeWriteIdIndex, in.aw.bits.id)
+      }
+      when(edgeOut.done(wOut)) {
         usedWriteIdsSet := freeWriteIdOH
       }
       when(okB.fire()) {

@@ -31,6 +31,7 @@ trait HasLazyAra { this: LazyModule =>
   (atlNode := TLFIFOFixer(TLFIFOFixer.all) // fix FIFO ordering
     := TLWidthWidget(axiDataWidth/8) // reduce size of TL
     := UnsafeAXI4ToTL(32) // convert to TL
+    := AXI4Buffer()
     := AXI4UserYanker(Some(8))
     := AXI4Fragmenter()
     := memAXI4Node)
