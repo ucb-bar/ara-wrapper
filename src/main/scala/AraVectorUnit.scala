@@ -41,6 +41,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
   def nLanes: Int
   def axiIdBits: Int
   def axiDataWidth: Int
+  def enableDelay: Boolean
 
   val status = Wire(new MStatus)
   val ex_valid = Wire(Bool())
@@ -171,27 +172,29 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
 
   // connect the axi interface
   memNode.out foreach { case (out, edgeOut) =>
-    ara.io.axi_resp_i_aw_ready    := out.aw.ready
-    out.aw.valid                   := ara.io.axi_req_o_aw_valid
-    out.aw.bits.id                 := ara.io.axi_req_o_aw_bits_id
-    out.aw.bits.addr               := ara.io.axi_req_o_aw_bits_addr
-    out.aw.bits.len                := ara.io.axi_req_o_aw_bits_len
-    out.aw.bits.size               := ara.io.axi_req_o_aw_bits_size
-    out.aw.bits.burst              := ara.io.axi_req_o_aw_bits_burst
-    out.aw.bits.lock               := ara.io.axi_req_o_aw_bits_lock
-    out.aw.bits.cache              := ara.io.axi_req_o_aw_bits_cache
-    out.aw.bits.prot               := ara.io.axi_req_o_aw_bits_prot
-    out.aw.bits.qos                := ara.io.axi_req_o_aw_bits_qos
+    val aw = Wire(Decoupled(out.aw.bits.cloneType))
+    ara.io.axi_resp_i_aw_ready    := aw.ready
+    aw.valid                   := ara.io.axi_req_o_aw_valid
+    aw.bits.id                 := ara.io.axi_req_o_aw_bits_id
+    aw.bits.addr               := ara.io.axi_req_o_aw_bits_addr
+    aw.bits.len                := ara.io.axi_req_o_aw_bits_len
+    aw.bits.size               := ara.io.axi_req_o_aw_bits_size
+    aw.bits.burst              := ara.io.axi_req_o_aw_bits_burst
+    aw.bits.lock               := ara.io.axi_req_o_aw_bits_lock
+    aw.bits.cache              := ara.io.axi_req_o_aw_bits_cache
+    aw.bits.prot               := ara.io.axi_req_o_aw_bits_prot
+    aw.bits.qos                := ara.io.axi_req_o_aw_bits_qos
     // unused signals
     assert(ara.io.axi_req_o_aw_bits_region === 0.U)
     assert(ara.io.axi_req_o_aw_bits_atop === 0.U)
     assert(ara.io.axi_req_o_aw_bits_user === 0.U)
 
-    ara.io.axi_resp_i_w_ready     := out.w.ready
-    out.w.valid                    := ara.io.axi_req_o_w_valid
-    out.w.bits.data                := ara.io.axi_req_o_w_bits_data
-    out.w.bits.strb                := ara.io.axi_req_o_w_bits_strb
-    out.w.bits.last                := ara.io.axi_req_o_w_bits_last
+    val w = Wire(Decoupled(out.w.bits.cloneType))
+    ara.io.axi_resp_i_w_ready     := w.ready
+    w.valid                    := ara.io.axi_req_o_w_valid
+    w.bits.data                := ara.io.axi_req_o_w_bits_data
+    w.bits.strb                := ara.io.axi_req_o_w_bits_strb
+    w.bits.last                := ara.io.axi_req_o_w_bits_last
     // unused signals
     assert(ara.io.axi_req_o_w_bits_user === 0.U)
 
@@ -201,20 +204,47 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
     ara.io.axi_resp_i_b_bits_resp := out.b.bits.resp
     ara.io.axi_resp_i_b_bits_user := 0.U // unused
 
-    ara.io.axi_resp_i_ar_ready    := out.ar.ready
-    out.ar.valid                   := ara.io.axi_req_o_ar_valid
-    out.ar.bits.id                 := ara.io.axi_req_o_ar_bits_id
-    out.ar.bits.addr               := ara.io.axi_req_o_ar_bits_addr
-    out.ar.bits.len                := ara.io.axi_req_o_ar_bits_len
-    out.ar.bits.size               := ara.io.axi_req_o_ar_bits_size
-    out.ar.bits.burst              := ara.io.axi_req_o_ar_bits_burst
-    out.ar.bits.lock               := ara.io.axi_req_o_ar_bits_lock
-    out.ar.bits.cache              := ara.io.axi_req_o_ar_bits_cache
-    out.ar.bits.prot               := ara.io.axi_req_o_ar_bits_prot
-    out.ar.bits.qos                := ara.io.axi_req_o_ar_bits_qos
+    val ar = Wire(Decoupled(out.ar.bits.cloneType))
+    ara.io.axi_resp_i_ar_ready    := ar.ready
+    ar.valid                   := ara.io.axi_req_o_ar_valid
+    ar.bits.id                 := ara.io.axi_req_o_ar_bits_id
+    ar.bits.addr               := ara.io.axi_req_o_ar_bits_addr
+    ar.bits.len                := ara.io.axi_req_o_ar_bits_len
+    ar.bits.size               := ara.io.axi_req_o_ar_bits_size
+    ar.bits.burst              := ara.io.axi_req_o_ar_bits_burst
+    ar.bits.lock               := ara.io.axi_req_o_ar_bits_lock
+    ar.bits.cache              := ara.io.axi_req_o_ar_bits_cache
+    ar.bits.prot               := ara.io.axi_req_o_ar_bits_prot
+    ar.bits.qos                := ara.io.axi_req_o_ar_bits_qos
     // unused signals
     assert(ara.io.axi_req_o_ar_bits_region === 0.U)
     assert(ara.io.axi_req_o_ar_bits_user === 0.U)
+
+    if (enableDelay) {
+      val latency = Wire(UInt(32.W))
+      latency := PlusArg("ara_mem_latency")
+      val delay_timer = RegInit(0.U(64.W))
+      delay_timer := delay_timer + 1.U
+      val ar_delay = Module(new DelayQueue(ar.bits.cloneType, 1024, 64))
+      val aw_delay = Module(new DelayQueue(aw.bits.cloneType, 1024, 64))
+      val w_delay = Module(new DelayQueue(w.bits.cloneType, 1024, 64))
+      ar_delay.io.timer := delay_timer
+      aw_delay.io.timer := delay_timer
+      w_delay.io.timer := delay_timer
+      ar_delay.io.delay := latency
+      aw_delay.io.delay := latency
+      w_delay.io.delay := latency
+      ar_delay.io.enq <> ar
+      aw_delay.io.enq <> aw
+      w_delay.io.enq <> w
+      out.ar <> ar_delay.io.deq
+      out.aw <> aw_delay.io.deq
+      out.w <> w_delay.io.deq
+    } else {
+      out.ar <> ar
+      out.aw <> aw
+      out.w <> w
+    }
 
     out.r.ready                    := ara.io.axi_req_o_r_ready
     ara.io.axi_resp_i_r_valid     := out.r.valid
@@ -227,12 +257,13 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
 
 }
 
-class AraShuttleUnit(val nLanes: Int, val axiIdBits: Int)(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasCoreParameters with HasLazyAra {
+class AraShuttleUnit(val nLanes: Int, val axiIdBits: Int, val enableDelay: Boolean)(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasCoreParameters with HasLazyAra {
   override lazy val module = new AraShuttleImpl(this)
   class AraShuttleImpl(outer: AraShuttleUnit) extends ShuttleVectorUnitModuleImp(outer) with HasCoreParameters with HasLazyAraImpl {
     def nLanes = outer.nLanes
     def axiIdBits = outer.axiIdBits
     def axiDataWidth = outer.axiDataWidth
+    def enableDelay = outer.enableDelay
     status := io.status
     ex_valid := io.ex.valid
     ex_inst := io.ex.uop.inst
@@ -282,13 +313,14 @@ class AraShuttleUnit(val nLanes: Int, val axiIdBits: Int)(implicit p: Parameters
   }
 }
 
-class AraRocketUnit(val nLanes: Int, val axiIdBits: Int)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasCoreParameters with HasLazyAra {
+class AraRocketUnit(val nLanes: Int, val axiIdBits: Int, val enableDelay: Boolean)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasCoreParameters with HasLazyAra {
   override lazy val module = new AraRocketImpl(this)
 
   class AraRocketImpl(outer: AraRocketUnit) extends RocketVectorUnitModuleImp(outer) with HasCoreParameters with HasLazyAraImpl {
     def nLanes = outer.nLanes
     def axiIdBits = outer.axiIdBits
     def axiDataWidth = outer.axiDataWidth
+    def enableDelay = outer.enableDelay
     status := io.core.status
     ex_valid := io.core.ex.valid
     ex_inst := io.core.ex.inst

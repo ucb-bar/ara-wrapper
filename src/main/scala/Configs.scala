@@ -8,7 +8,7 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.subsystem._
 import shuttle.common.{ShuttleTileAttachParams, ShuttleCoreVectorParams}
 
-class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option[Seq[Int]] = None) extends Config((site, here, up) => {
+class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option[Seq[Int]] = None, enableDelay: Boolean = false) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: RocketTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
@@ -16,7 +16,7 @@ class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(
         core = tp.tileParams.core.copy(
           vector = Some(RocketCoreVectorParams(
-            build = ((p: Parameters) => new AraRocketUnit(nLanes, axiIdBits)(p)),
+            build = ((p: Parameters) => new AraRocketUnit(nLanes, axiIdBits, enableDelay)(p)),
             vLen = 4096,
             vMemDataBits = 0,
             decoder = ((p: Parameters) => {
@@ -33,14 +33,14 @@ class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option
   }
 })
 
-class WithAraShuttleVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option[Seq[Int]] = None) extends Config((site, here, up) => {
+class WithAraShuttleVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option[Seq[Int]] = None, enableDelay: Boolean = false) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: ShuttleTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(
         core = tp.tileParams.core.copy(
           vector = Some(ShuttleCoreVectorParams(
-            build = ((p: Parameters) => new AraShuttleUnit(nLanes, axiIdBits)(p)),
+            build = ((p: Parameters) => new AraShuttleUnit(nLanes, axiIdBits, enableDelay)(p)),
             vLen = 4096,
             decoder = ((p: Parameters) => {
               val decoder = Module(new AraEarlyVectorDecode()(p))
