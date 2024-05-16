@@ -225,10 +225,13 @@ class UnsafeAXI4ToTL(numTlTxns: Int, wcorrupt: Boolean)(implicit p: Parameters) 
       val (_dFirst, dLast, _dDone, dCount) = edgeOut.count(out.d)
       val dNumBeats1                       = edgeOut.numBeats1(out.d.bits)
 
-      out.d.ready                          := Mux(dHasData, listBuffer.ioResponse.ready, okB.ready)
+      // Handle cases where writeack arrives before write is done
+      val writeEarlyAck = (UIntToOH(strippedResponseSourceId) & usedWriteIds) === 0.U
+
+      out.d.ready                          := Mux(dHasData, listBuffer.ioResponse.ready, okB.ready && !writeEarlyAck)
       listBuffer.ioDataOut.ready           := okR.ready
       okR.valid                            := listBuffer.ioDataOut.valid
-      okB.valid                            := out.d.valid && !dHasData
+      okB.valid                            := out.d.valid && !dHasData && !writeEarlyAck
       listBuffer.ioResponse.valid          := out.d.valid && dHasData
       listBuffer.ioResponse.bits.index     := strippedResponseSourceId
       listBuffer.ioResponse.bits.data.data := out.d.bits.data
