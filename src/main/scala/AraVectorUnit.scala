@@ -73,7 +73,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
   val mem_inst = RegEnable(ex_inst, ex_valid)
   val mem_vconfig = RegEnable(ex_vconfig, ex_valid)
   val mem_rs1 = Mux(mem_inst(14,12).isOneOf(1.U, 5.U) && !mem_inst(6,0).isOneOf(7.U, 39.U),
-    mem_frs1 & eewBitMask(mem_vconfig.vtype.vsew),
+    mem_frs1 & eewBitMask(mem_vconfig.vtype.vsew) | (~(0.U(64.W)) & ~eewBitMask(mem_vconfig.vtype.vsew)),
     RegEnable(ex_rs1, ex_valid))
   val mem_rs2 = RegEnable(ex_rs2, ex_valid)
   val mem_pc = RegEnable(ex_pc, ex_valid)
