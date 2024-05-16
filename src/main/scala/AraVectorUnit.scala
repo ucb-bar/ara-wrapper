@@ -69,7 +69,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
 
   val ara = Module(new AraBlackbox(nXacts, nLanes, axiIdBits, 64, 1, axiDataWidth))
 
-  val mem_valid = RegNext(ex_valid && !mem_kill, false.B) && !mem_kill
+  val mem_valid = RegNext(ex_valid, false.B) && !mem_kill
   val mem_inst = RegEnable(ex_inst, ex_valid)
   val mem_vconfig = RegEnable(ex_vconfig, ex_valid)
   val mem_rs1 = Mux(mem_inst(14,12).isOneOf(1.U, 5.U) && !mem_inst(6,0).isOneOf(7.U, 39.U),
@@ -115,7 +115,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
 
   val xact_valids = RegInit(VecInit.fill(nXacts)(false.B))
   val xacts = Reg(Vec(nXacts, new Xact))
-  val store_pending = xact_valids.zip(xacts).map(t => t._1 && t._2.store).orR
+  val store_pending = xact_valids.zip(xacts).map(t => t._1 && t._2.store).orR || ara.io.resp.store_pending
   val load_pending = xact_valids.zip(xacts).map(t => t._1 && t._2.load).orR
 
   val wb_store = wb_inst(6,0) === "b0100111".U
@@ -126,7 +126,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
 
   when (wb_valid && wb_retire && wb_ready) {
     xact_valids(next_xact_id) := true.B
-    xacts(next_xact_id).wxd := wb_dec.io.write_rd && !wb_set
+    xacts(next_xact_id).wxd := wb_dec.io.write_rd || wb_set
     xacts(next_xact_id).wfd := wb_dec.io.write_frd && !wb_set
     xacts(next_xact_id).size := wb_vconfig.vtype.vsew
     xacts(next_xact_id).rd := wb_inst(11,7)
