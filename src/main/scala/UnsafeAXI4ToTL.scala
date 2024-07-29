@@ -160,7 +160,7 @@ class UnsafeAXI4ToTL(numTlTxns: Int, wcorrupt: Boolean)(implicit p: Parameters) 
 
       // Track when a write request burst is in progress.
       val writeBurstBusy = RegInit(false.B)
-      when(in.w.fire()) {
+      when(in.w.fire) {
         writeBurstBusy := !in.w.bits.last
       }
 
@@ -257,7 +257,7 @@ class UnsafeAXI4ToTL(numTlTxns: Int, wcorrupt: Boolean)(implicit p: Parameters) 
       when(edgeOut.done(wOut)) {
         usedWriteIdsSet := freeWriteIdOH
       }
-      when(okB.fire()) {
+      when(okB.fire) {
         usedWriteIdsClr := UIntToOH(strippedResponseSourceId, numTlTxns)
       }
 
@@ -350,7 +350,7 @@ abstract class BaseReservableListBuffer[T <: Data](gen: T, params: ReservableLis
   *
   * ==Module IO==
   * @param ioReserve       Index of list to reserve a new element in
-  * @param ioReservedIndex Index of the entry that was reserved in the linked list, valid when 'ioReserve.fire()'
+  * @param ioReservedIndex Index of the entry that was reserved in the linked list, valid when 'ioReserve.fire'
   * @param ioResponse      Payload containing response data and linked-list-entry index
   * @param ioDataOut       Payload containing data read from response linked list and linked list index
   */
@@ -419,9 +419,9 @@ class ReservableListBuffer[T <: Data](gen: T, params: ReservableListBufferParame
   // actually start a new list, rather than appending to a list that's about to disappear.
   val reserveResponseSameList = ioReserve.bits === responseListIndex
   val appendToAndDestroyList =
-    ioReserve.fire() && ioDataOut.fire() && reserveResponseSameList && isEndOfList && isLastBeat
+    ioReserve.fire && ioDataOut.fire && reserveResponseSameList && isEndOfList && isLastBeat
 
-  when(ioReserve.fire()) {
+  when(ioReserve.fire) {
     validSet := UIntToOH(ioReserve.bits, params.numLists)
     usedSet  := freeOH
     when(reserveIsValid && !appendToAndDestroyList) {
@@ -436,7 +436,7 @@ class ReservableListBuffer[T <: Data](gen: T, params: ReservableListBufferParame
   /* Response logic */
 
   // The majority of the response logic (reading from and writing to the various RAMs) is common between the
-  // response-from-IO case (ioResponse.fire()) and the response-from-unwind case (unwindDataIsValid).
+  // response-from-IO case (ioResponse.fire) and the response-from-unwind case (unwindDataIsValid).
 
   // The read from the 'next' RAM should be performed at the address given by 'responseHead'. However, we only use the
   // 'nextResponseHead' signal when 'isResponseInOrder' is asserted (both in the response-from-IO and
@@ -460,7 +460,7 @@ class ReservableListBuffer[T <: Data](gen: T, params: ReservableListBufferParame
   //  1. We receive an in-order response, which travels straight from 'ioResponse' to 'ioDataOut'. The 'data' SRAM
   //     reservation was never needed.
   //  2. An entry is read out of the 'data' SRAM (within the unwind FSM).
-  when(ioDataOut.fire() && isLastBeat) {
+  when(ioDataOut.fire && isLastBeat) {
     // Mark the reservation as no-longer-used.
     usedClr := UIntToOH(responseIndex, params.numEntries)
     // If the response is in-order, then we're popping an element from this linked list.
@@ -474,7 +474,7 @@ class ReservableListBuffer[T <: Data](gen: T, params: ReservableListBufferParame
   }
 
   // If we get an out-of-order response, then stash it in the 'data' SRAM for later unwinding.
-  when(ioResponse.fire() && !isResponseInOrder) {
+  when(ioResponse.fire && !isResponseInOrder) {
     dataMemWriteEnable := true.B
 
     when(isLastResponseBeat) {
@@ -514,7 +514,7 @@ class ReservableListBuffer[T <: Data](gen: T, params: ReservableListBufferParame
   //
   // Note that since an in-order response from 'ioResponse' to 'ioDataOut' starts the unwind FSM, we don't have to
   // worry about overwriting the 'data' SRAM's output when we start the unwind FSM.
-  startUnwind := ioResponse.fire() && isResponseInOrder && isLastResponseBeat && !isEndOfList && nextDataIsPresent
+  startUnwind := ioResponse.fire && isResponseInOrder && isLastResponseBeat && !isEndOfList && nextDataIsPresent
 
   // Stop the unwind FSM when the output channel consumes the final beat of an element from the unwind FSM, and one of
   // two things happens:
@@ -523,7 +523,7 @@ class ReservableListBuffer[T <: Data](gen: T, params: ReservableListBufferParame
   //
   // Including 'busyUnwinding' ensures this is a single-cycle pulse, and it never fires while in-order transactions are
   // passing from 'ioResponse' to 'ioDataOut'.
-  stopUnwind := busyUnwinding && ioDataOut.fire() && isLastUnwindBeat && (!nextDataIsPresent || isEndOfList)
+  stopUnwind := busyUnwinding && ioDataOut.fire && isLastUnwindBeat && (!nextDataIsPresent || isEndOfList)
 
   val isUnwindBurstOver = Wire(Bool())
   val startNewBurst     = startUnwind || (isUnwindBurstOver && dataMemReadEnable)
@@ -562,7 +562,7 @@ class ReservableListBuffer[T <: Data](gen: T, params: ReservableListBufferParame
   val unwindDataIsValid = RegInit(false.B)
   when(dataMemReadEnable) {
     unwindDataIsValid := true.B
-  }.elsewhen(ioDataOut.fire()) {
+  }.elsewhen(ioDataOut.fire) {
     unwindDataIsValid := false.B
   }
 
@@ -613,7 +613,7 @@ class ReservableListBuffer[T <: Data](gen: T, params: ReservableListBufferParame
   ioDataOut.bits.payload   := Mux(busyUnwinding, dataOutput, ioResponse.bits.data)
 
   // It's an error to get a response that isn't associated with a valid linked list.
-  when(ioResponse.fire() || unwindDataIsValid) {
+  when(ioResponse.fire || unwindDataIsValid) {
     assert(
       valid(responseListIndex),
       "No linked list exists at index %d, mapped from %d",
@@ -647,7 +647,7 @@ class PassthroughListBuffer[T <: Data](gen: T, params: ReservableListBufferParam
   ioReserve.ready := used === 0.U
 
   // Store which list index was reserved, we need to return this value when we get a response.
-  when(ioReserve.fire()) {
+  when(ioReserve.fire) {
     usedSet := 1.U
     map.write(0.U, ioReserve.bits)
   }
@@ -658,8 +658,8 @@ class PassthroughListBuffer[T <: Data](gen: T, params: ReservableListBufferParam
   val isLastResponseBeat = ioResponse.bits.count === ioResponse.bits.numBeats1
 
   // Mark the linked list as empty when we get the last beat in a response.
-  // Note that 'ioResponse.fire() === ioDataOut.fire()'.
-  when(ioResponse.fire() && isLastResponseBeat) {
+  // Note that 'ioResponse.fire === ioDataOut.fire'.
+  when(ioResponse.fire && isLastResponseBeat) {
     usedClr := 1.U
   }
 
