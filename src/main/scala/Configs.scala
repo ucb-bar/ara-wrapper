@@ -18,6 +18,9 @@ class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option
           vector = Some(RocketCoreVectorParams(
             build = ((p: Parameters) => new AraRocketUnit(nLanes, axiIdBits, enableDelay)(p)),
             vLen = 4096,
+            eLen = 64,
+            vfLen = 64,
+            vfh = false,
             vMemDataBits = 0,
             decoder = ((p: Parameters) => {
               val decoder = Module(new AraEarlyVectorDecode()(p))
@@ -42,6 +45,8 @@ class WithAraShuttleVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Optio
           vector = Some(ShuttleCoreVectorParams(
             build = ((p: Parameters) => new AraShuttleUnit(nLanes, axiIdBits, enableDelay)(p)),
             vLen = 4096,
+            vfLen = 64,
+            vfh = false,
             decoder = ((p: Parameters) => {
               val decoder = Module(new AraEarlyVectorDecode()(p))
               decoder
