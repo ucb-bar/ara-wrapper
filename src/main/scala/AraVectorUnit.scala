@@ -39,6 +39,7 @@ trait HasLazyAra { this: LazyModule =>
 
 trait HasLazyAraImpl { this: LazyModuleImp =>
   def nLanes: Int
+  def vLen: Int
   def axiIdBits: Int
   def axiDataWidth: Int
   def enableDelay: Boolean
@@ -67,7 +68,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
   }.reduce(_|_)((eLen/8)-1,0)
   def eewBitMask(eew: UInt) = FillInterleaved(8, eewByteMask(eew))
 
-  val ara = Module(new AraBlackbox(nXacts, nLanes, axiIdBits, 64, 1, axiDataWidth))
+  val ara = Module(new AraBlackbox(vLen, nXacts, nLanes, axiIdBits, 64, 1, axiDataWidth))
 
   val mem_valid = RegNext(ex_valid, false.B) && !mem_kill
   val mem_inst = RegEnable(ex_inst, ex_valid)

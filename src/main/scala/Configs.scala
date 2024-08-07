@@ -8,7 +8,7 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.subsystem._
 import shuttle.common.{ShuttleTileAttachParams, ShuttleCoreVectorParams}
 
-class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option[Seq[Int]] = None, enableDelay: Boolean = false) extends Config((site, here, up) => {
+class WithAraRocketVectorUnit(vLen: Int = 4096, nLanes: Int = 2, axiIdBits: Int = 4, cores: Option[Seq[Int]] = None, enableDelay: Boolean = false) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: RocketTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
@@ -17,7 +17,7 @@ class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option
         core = tp.tileParams.core.copy(
           vector = Some(RocketCoreVectorParams(
             build = ((p: Parameters) => new AraRocketUnit(nLanes, axiIdBits, enableDelay)(p)),
-            vLen = 4096,
+            vLen = vLen,
             eLen = 64,
             vfLen = 64,
             vfh = false,
@@ -36,7 +36,7 @@ class WithAraRocketVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option
   }
 })
 
-class WithAraShuttleVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Option[Seq[Int]] = None, enableDelay: Boolean = false) extends Config((site, here, up) => {
+class WithAraShuttleVectorUnit(vLen: Int = 4096, nLanes: Int = 2, axiIdBits: Int = 4, cores: Option[Seq[Int]] = None, enableDelay: Boolean = false) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: ShuttleTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
@@ -44,7 +44,7 @@ class WithAraShuttleVectorUnit(nLanes: Int = 2, axiIdBits: Int = 4, cores: Optio
         core = tp.tileParams.core.copy(
           vector = Some(ShuttleCoreVectorParams(
             build = ((p: Parameters) => new AraShuttleUnit(nLanes, axiIdBits, enableDelay)(p)),
-            vLen = 4096,
+            vLen = vLen,
             vfLen = 64,
             vfh = false,
             decoder = ((p: Parameters) => {
