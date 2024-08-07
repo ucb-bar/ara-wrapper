@@ -129,6 +129,7 @@ module AraBlackbox
    assign acc_req.acc_req.store_pending = req_store_pending;
    assign acc_req.acc_req.acc_cons_en = req_acc_cons_en;
    assign acc_req.acc_req.inval_ready = req_inval_ready;
+   assign acc_req.acc_mmu_en = 1'b0;
 
    assign resp_req_ready = acc_resp.acc_resp.req_ready;
    assign resp_resp_valid = acc_resp.acc_resp.resp_valid;
