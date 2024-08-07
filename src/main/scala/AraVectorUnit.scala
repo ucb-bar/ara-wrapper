@@ -111,6 +111,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
     val rd = UInt(5.W)
     val store = Bool()
     val load = Bool()
+    val vset = Bool()
     def writes = wfd || wxd
   }
 
@@ -133,6 +134,7 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
     xacts(next_xact_id).rd := wb_inst(11,7)
     xacts(next_xact_id).store := wb_store
     xacts(next_xact_id).load := wb_load
+    xacts(next_xact_id).vset := Seq(Instructions.VSETVLI, Instructions.VSETIVLI, Instructions.VSETVL).map(_ === wb_inst).orR
   }
 
   when (resp_q.io.deq.fire) {
@@ -152,12 +154,13 @@ trait HasLazyAraImpl { this: LazyModuleImp =>
   resp_q.io.enq.bits.trans_id := ara.io.resp.trans_id
   ara.io.req.resp_ready :=  resp_q.io.enq.ready
 
-  val resp_valid = resp_q.io.deq.valid && xact_valids(resp_q.io.deq.bits.trans_id) && xacts(resp_q.io.deq.bits.trans_id).writes
+  val resp_id = resp_q.io.deq.bits.trans_id
+  val resp_valid = resp_q.io.deq.valid && xact_valids(resp_id) && xacts(resp_id).writes && !xacts(resp_id).vset
   val resp_fp = xacts(resp_q.io.deq.bits.trans_id).wfd
   val resp_size = xacts(resp_q.io.deq.bits.trans_id).size
   val resp_rd = xacts(resp_q.io.deq.bits.trans_id).rd
   val resp_data = resp_q.io.deq.bits.result
-  resp_q.io.deq.ready := resp_ready
+  resp_q.io.deq.ready := resp_ready || xacts(resp_id).vset
 
   ara.io.clk_i := clock
   ara.io.rst_ni := !reset.asBool
@@ -273,7 +276,7 @@ class AraShuttleUnit(val nLanes: Int, val axiIdBits: Int, val enableDelay: Boole
     ex_vstart := io.ex.vstart
     ex_rs1 := io.ex.uop.rs1_data
     ex_rs2 := io.ex.uop.rs2_data
-    mem_kill := io.mem.kill
+    mem_kill := io.mem.kill || io.wb.block_all
     mem_frs1 := io.mem.frs1
     wb_store_pending := io.wb.store_pending
     wb_frm := io.wb.frm
@@ -330,13 +333,13 @@ class AraRocketUnit(val nLanes: Int, val axiIdBits: Int, val enableDelay: Boolea
     ex_vstart := io.core.ex.vstart
     ex_rs1 := io.core.ex.rs1
     ex_rs2 := io.core.ex.rs2
-    mem_kill := io.core.killm
+    mem_kill := io.core.killm || io.core.wb.replay
     mem_frs1 := io.core.mem.frs1
     wb_store_pending := io.core.wb.store_pending
     wb_frm := io.core.wb.frm
     def memNode = memAXI4Node
 
-    io.core.resp.valid := resp_valid
+    io.core.resp.valid := resp_valid 
     io.core.resp.bits.fp := resp_fp
     io.core.resp.bits.size := resp_size
     io.core.resp.bits.rd := resp_rd
