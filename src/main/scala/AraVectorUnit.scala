@@ -269,7 +269,7 @@ class AraShuttleUnit(val nLanes: Int, val axiIdBits: Int, val enableDelay: Boole
     def axiDataWidth = outer.axiDataWidth
     def enableDelay = outer.enableDelay
     status := io.status
-    ex_valid := io.ex.fire
+    ex_valid := io.ex.valid && io.ex.fire
     ex_inst := io.ex.uop.inst
     ex_pc := io.ex.uop.pc
     ex_vconfig := io.ex.vconfig
