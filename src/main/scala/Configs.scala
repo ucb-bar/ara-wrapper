@@ -27,7 +27,8 @@ class WithAraRocketVectorUnit(vLen: Int = 4096, nLanes: Int = 2, axiIdBits: Int 
               decoder
             }),
             useDCache = false,
-            issueVConfig = true
+            issueVConfig = true,
+            vExts = Nil
           )),
         )
       )) else tp
@@ -51,7 +52,8 @@ class WithAraShuttleVectorUnit(vLen: Int = 4096, nLanes: Int = 2, axiIdBits: Int
               val decoder = Module(new AraEarlyVectorDecode()(p))
               decoder
             }),
-            issueVConfig = true
+            issueVConfig = true,
+            vExts = Nil
           )),
         )
       )) else tp
