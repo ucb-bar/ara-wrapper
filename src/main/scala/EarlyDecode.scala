@@ -54,9 +54,11 @@ class AraEarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()
   val funct3 = io.inst(14,12)
   val funct6 = io.inst(31,26)
 
-  val v_load = opcode === opcLoad
-  val v_store = opcode === opcStore
+  val v_load = opcode === opcLoad && !width.isOneOf(1.U, 2.U, 3.U, 4.U)
+  val v_store = opcode === opcStore && !width.isOneOf(1.U, 2.U, 3.U, 4.U)
   val v_arith = opcode === opcVector && funct3 =/= 7.U
+
+  io.vector := v_load || v_store || v_arith
 
   when (v_load || v_store) {
     io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U)
