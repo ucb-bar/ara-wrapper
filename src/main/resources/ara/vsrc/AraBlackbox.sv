@@ -1,11 +1,12 @@
 module AraBlackbox
     #(
       parameter TRANS_ID_WIDTH,
-      parameter	NLANES,
-      parameter	AXI_ID_WIDTH,
-      parameter	AXI_ADDR_WIDTH,
-      parameter	AXI_USER_WIDTH,
-      parameter	AXI_DATA_WIDTH
+      parameter NLANES,
+      parameter VLEN,
+      parameter AXI_ID_WIDTH,
+      parameter AXI_ADDR_WIDTH,
+      parameter AXI_USER_WIDTH,
+      parameter AXI_DATA_WIDTH
      )
 (
     input			    clk_i,
@@ -76,7 +77,6 @@ module AraBlackbox
     output			    resp_resp_valid,
     output [63:0]		    resp_result,
     output [TRANS_ID_WIDTH-1:0]	    resp_trans_id,
-    output			    resp_error,
     output			    resp_store_pending,
     output			    resp_store_complete,
     output			    resp_load_complete,
@@ -109,38 +109,39 @@ module AraBlackbox
   `AXI_TYPEDEF_RESP_T(axi_resp_t, b_chan_t, r_chan_t)
   `AXI_TYPEDEF_ALL(ara_axi, axi_addr_t, axi_core_id_t, axi_data_t, axi_strb_t, axi_user_t)
 
-   import acc_pkg::accelerator_req_t;
-   import acc_pkg::accelerator_resp_t;
+   import acc_pkg::cva6_to_acc_t;
+   import acc_pkg::acc_to_cva6_t;
+   
    // Accelerator ports
-   accelerator_req_t                     acc_req;
-   accelerator_resp_t                    acc_resp;
+   cva6_to_acc_t                     acc_req;
+   acc_to_cva6_t                    acc_resp;
    ara_axi_req_t     ara_axi_req;
    ara_axi_resp_t    ara_axi_resp;
 
    
-   assign acc_req.req_valid = req_req_valid;
-   assign acc_req.resp_ready = req_resp_ready;
-   assign acc_req.insn = req_insn;
-   assign acc_req.rs1 = req_rs1;
-   assign acc_req.rs2 = req_rs2;
-   assign acc_req.frm = req_frm;
-   assign acc_req.trans_id = req_trans_id;
-   assign acc_req.store_pending = req_store_pending;
-   assign acc_req.acc_cons_en = req_acc_cons_en;
-   assign acc_req.inval_ready = req_inval_ready;
+   assign acc_req.acc_req.req_valid = req_req_valid;
+   assign acc_req.acc_req.resp_ready = req_resp_ready;
+   assign acc_req.acc_req.insn = req_insn;
+   assign acc_req.acc_req.rs1 = req_rs1;
+   assign acc_req.acc_req.rs2 = req_rs2;
+   assign acc_req.acc_req.frm = req_frm;
+   assign acc_req.acc_req.trans_id = req_trans_id;
+   assign acc_req.acc_req.store_pending = req_store_pending;
+   assign acc_req.acc_req.acc_cons_en = req_acc_cons_en;
+   assign acc_req.acc_req.inval_ready = req_inval_ready;
+   assign acc_req.acc_mmu_en = 1'b0;
 
-   assign resp_req_ready = acc_resp.req_ready;
-   assign resp_resp_valid = acc_resp.resp_valid;
-   assign resp_result = acc_resp.result;
-   assign resp_trans_id = acc_resp.trans_id;
-   assign resp_error = acc_resp.error;
-   assign resp_store_pending = acc_resp.store_pending;
-   assign resp_store_complete = acc_resp.store_complete;
-   assign resp_load_complete = acc_resp.load_complete;
-   assign resp_fflags = acc_resp.fflags;
-   assign resp_fflags_valid = acc_resp.fflags_valid;
-   assign resp_inval_valid = acc_resp.inval_valid;
-   assign resp_inval_addr = acc_resp.inval_addr;
+   assign resp_req_ready = acc_resp.acc_resp.req_ready;
+   assign resp_resp_valid = acc_resp.acc_resp.resp_valid;
+   assign resp_result = acc_resp.acc_resp.result;
+   assign resp_trans_id = acc_resp.acc_resp.trans_id;
+   assign resp_store_pending = acc_resp.acc_resp.store_pending;
+   assign resp_store_complete = acc_resp.acc_resp.store_complete;
+   assign resp_load_complete = acc_resp.acc_resp.load_complete;
+   assign resp_fflags = acc_resp.acc_resp.fflags;
+   assign resp_fflags_valid = acc_resp.acc_resp.fflags_valid;
+   assign resp_inval_valid = acc_resp.acc_resp.inval_valid;
+   assign resp_inval_addr = acc_resp.acc_resp.inval_addr;
 
    assign ara_axi_resp.aw_ready = axi_resp_i_aw_ready;
    assign axi_req_o_aw_valid = ara_axi_req.aw_valid;
@@ -194,6 +195,7 @@ module AraBlackbox
 
 
    ara #(
+         .VLEN(VLEN),
 	 .NrLanes(NLANES),
 	 .AxiDataWidth(AXI_DATA_WIDTH),
 	 .AxiAddrWidth(AXI_ADDR_WIDTH),

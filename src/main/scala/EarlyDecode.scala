@@ -54,13 +54,16 @@ class AraEarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()
   val funct3 = io.inst(14,12)
   val funct6 = io.inst(31,26)
 
-  val v_load = opcode === opcLoad
-  val v_store = opcode === opcStore
+  val v_load = opcode === opcLoad && !width.isOneOf(1.U, 2.U, 3.U, 4.U)
+  val v_store = opcode === opcStore && !width.isOneOf(1.U, 2.U, 3.U, 4.U)
   val v_arith = opcode === opcVector && funct3 =/= 7.U
 
+  io.vector := v_load || v_store || v_arith
+
   when (v_load || v_store) {
-    io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U)
     val unit = mop === 0.U
+    val whole = unit && ((v_load && lumop === lumopWhole) || (v_store && sumop === sumopWhole))
+    io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U) && (!io.vconfig.vtype.vill || whole)
     when (unit) {
       when (v_load && !lumop.isOneOf(lumopUnit, lumopWhole, lumopMask, lumopFF)) { io.legal := false.B }
       when (v_store && !sumop.isOneOf(sumopUnit, sumopWhole, sumopMask)) { io.legal := false.B }
@@ -69,7 +72,7 @@ class AraEarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()
     io.read_rs1 := true.B
     io.read_rs2 := mop === mopStrided
   } .elsewhen (v_arith) {
-    io.legal := true.B
+    io.legal := !io.vconfig.vtype.vill
     io.read_rs1 := funct3.isOneOf(OPIVX, OPMVX)
     io.read_frs1 := funct3 === OPFVF
     io.write_rd := funct3 === OPMVV && funct6 === "b010000".U

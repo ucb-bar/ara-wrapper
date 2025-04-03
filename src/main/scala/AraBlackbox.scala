@@ -18,17 +18,18 @@ import freechips.rocketchip.subsystem.{RocketCrossingParams}
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
-import freechips.rocketchip.tile._
+import freechips.rocketchip.tile._ 
 import freechips.rocketchip.amba.axi4._
 
-class AraBlackbox(nXacts: Int, nLanes: Int, axiIdWidth: Int, axiAddrWidth: Int, axiUserWidth: Int, axiDataWidth: Int) extends BlackBox(Map(
+class AraBlackbox(vLen: Int, nXacts: Int, nLanes: Int, axiIdWidth: Int, axiAddrWidth: Int, axiUserWidth: Int, axiDataWidth: Int) extends BlackBox(Map(
   "TRANS_ID_WIDTH" -> IntParam(log2Ceil(nXacts)),
+  "VLEN" -> IntParam(vLen), 
   "NLANES" -> IntParam(nLanes),
   "AXI_ID_WIDTH" -> IntParam(axiIdWidth),
   "AXI_ADDR_WIDTH" -> IntParam(axiAddrWidth),
   "AXI_USER_WIDTH" -> IntParam(axiUserWidth),
   "AXI_DATA_WIDTH" -> IntParam(axiDataWidth)
-)) with HasBlackBoxResource {
+)) with HasBlackBoxResource { 
   require(axiDataWidth == (64 * nLanes / 2))
   val xactWidth = log2Ceil(nXacts)
   val io = IO(new Bundle {
@@ -102,7 +103,6 @@ class AraBlackbox(nXacts: Int, nLanes: Int, axiIdWidth: Int, axiAddrWidth: Int, 
       val resp_valid = Bool()
       val result = UInt(64.W)
       val trans_id = UInt(xactWidth.W)
-      val error = Bool()
       val store_pending = Bool()
       val store_complete = Bool()
       val load_complete = Bool()
